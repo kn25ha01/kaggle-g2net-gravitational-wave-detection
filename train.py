@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from sklearn.model_selection import StratifiedKFold
+import wandb
 
 from config import CFG
 from src.utils import get_score, init_logger, seed_torch, get_device
@@ -42,7 +43,7 @@ def train_fn(files, model, criterion, optimizer, epoch, scheduler, device):
     global_step = 0
 
     train_loader = TFRecordDataLoader(
-        files, batch_size=CFG.batch_size, shuffle=True)
+        files, cache=True, batch_size=CFG.batch_size, shuffle=True)
     for step, d in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -79,6 +80,11 @@ def train_fn(files, model, criterion, optimizer, epoch, scheduler, device):
                    lr=scheduler.get_lr()[0],
                    remain=timeSince(start, float(step + 1) / len(train_loader)),
                    mem=max_memory_allocated()))
+        # wandb
+        wandb.log({
+            f"loss": losses.val,
+            f"lr": scheduler.get_lr()[0]
+        })
     return losses.avg
 
 
@@ -94,7 +100,7 @@ def valid_fn(files, model, criterion, device):
     preds = []
     start = end = time.time()
     valid_loader = TFRecordDataLoader(
-        files, batch_size=CFG.batch_size * 2, shuffle=False)
+        files, cache=True, batch_size=CFG.batch_size * 2, shuffle=False)
     for step, d in enumerate(valid_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -193,6 +199,13 @@ def train_loop(train_tfrecords: np.ndarray, val_tfrecords: np.ndarray, fold: int
 
         LOGGER.info(f'Epoch {epoch+1} - avg_train_loss: {avg_loss:.4f}  avg_val_loss: {avg_val_loss:.4f}  time: {elapsed:.0f}s')
         LOGGER.info(f'Epoch {epoch+1} - Score: {score:.4f}')
+        # wandb
+        wandb.log({
+            f"epoch": epoch + 1,
+            f"avg_train_loss": avg_loss,
+            f"avg_val_loss": avg_val_loss,
+            f"score": score,
+        })
 
         if score > best_score:
             best_score = score
@@ -214,9 +227,14 @@ def train_loop(train_tfrecords: np.ndarray, val_tfrecords: np.ndarray, fold: int
     return valid_result_df
 
 
+def class2dict(f):
+    return dict((name, getattr(f, name)) for name in dir(f) if not name.startswith('__'))
+
+
 def main(args):
     # get input dir
     INPUT_DIR = args.input_dir
+    exp_num = args.exp_num
 
     fold0 = [INPUT_DIR + f"/train_fold01/train{i}.tfrecords" for i in range(0, 5)]
     fold1 = [INPUT_DIR + f"/train_fold01/train{i}.tfrecords" for i in range(5, 10)]
@@ -229,13 +247,25 @@ def main(args):
         labels = result_df[CFG.target_col].values
         score = get_score(labels, preds)
         LOGGER.info(f'Score: {score:<.4f}')
+
+    # wandb
+    wandb_api_key = args.wandb_api_key
+    wandb.login(key=wandb_api_key)
     
     if CFG.train:
-        # train 
         oof_df = pd.DataFrame()
 
         for fold in range(CFG.n_fold):
             if fold in CFG.trn_fold:
+                # wandb
+                wandb.init(
+                    project=CFG.project,
+                    name=f"{exp_num}_fold{fold}",
+                    config=class2dict(CFG),
+                    group=CFG.model_name,
+                    job_type="train",
+                )
+
                 train_files = [f for i, f in enumerate(folds) if i != fold]
                 train_files = [i for j in train_files for i in j]
                 valid_files = folds[fold]
@@ -249,10 +279,15 @@ def main(args):
         # save result
         oof_df.to_csv(SAVEDIR / 'oof_df.csv', index=False)
 
+    # wandb
+    wandb.finish()
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, required=True, dest='input_dir')
+    parser.add_argument('-e', '--exp_num', type=str, required=True, dest='exp_num')
+    parser.add_argument('--wandb_api_key', type=str, required=True, dest='wandb_api_key')
     args = parser.parse_args()
     if not os.path.exists(args.input_dir): raise Exception(f"{args.input_dir} is not found.")
     return args
