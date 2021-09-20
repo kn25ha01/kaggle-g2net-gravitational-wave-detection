@@ -22,7 +22,7 @@ class CFG:
         "hop_length": 32,
         "bins_per_octave": 8,
     }
-    model_name = "tf_efficientnet_b0_ns"
+    model_name = "tf_efficientnet_b4_ns"
     in_chans = 3
     target_size = 1
     target_col = "target"
@@ -34,6 +34,8 @@ class CFG:
     epochs = 1
     batch_size = 128
     if model_name == "tf_efficientnet_b0_ns": batch_size = 1024
+    if model_name == "tf_efficientnet_b4_ns": batch_size = 256
+    if model_name == "tf_efficientnet_b7_ns": batch_size = 64
     lr = 1e-4
     min_lr = 1e-7
     weight_decay = 1e-3

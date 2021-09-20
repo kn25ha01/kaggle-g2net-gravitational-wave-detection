@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import numpy as np
 import torch
@@ -35,4 +36,14 @@ def seed_torch(seed=42):
 def get_device():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     return device
+
+
+def get_wandb_api_key(filename: str):
+    if not os.path.exists(filename):
+        print(f"{filename} is not exist.")
+        return None
+
+    f = open(filename, 'r')
+    j = json.load(f)
+    return j['api_key']
 

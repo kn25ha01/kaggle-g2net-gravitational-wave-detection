@@ -15,7 +15,7 @@ from sklearn.model_selection import StratifiedKFold
 import wandb
 
 from config import CFG
-from src.utils import get_score, init_logger, seed_torch, get_device
+from src.utils import get_score, init_logger, seed_torch, get_device, get_wandb_api_key
 from src.model_factory import CustomModel
 from src.dataset_factory import TFRecordDataLoader
 from src.helper import AverageMeter, timeSince, max_memory_allocated
@@ -249,7 +249,8 @@ def main(args):
         LOGGER.info(f'Score: {score:<.4f}')
 
     # wandb
-    wandb_api_key = args.wandb_api_key
+    wandb_json_path = args.wandb_json_path
+    wandb_api_key = get_wandb_api_key(wandb_json_path)
     wandb.login(key=wandb_api_key)
     
     if CFG.train:
@@ -287,9 +288,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, required=True, dest='input_dir')
     parser.add_argument('-e', '--exp_num', type=str, required=True, dest='exp_num')
-    parser.add_argument('--wandb_api_key', type=str, required=True, dest='wandb_api_key')
+    parser.add_argument('--wandb', type=str, required=True, dest='wandb_json_path')
     args = parser.parse_args()
     if not os.path.exists(args.input_dir): raise Exception(f"{args.input_dir} is not found.")
+    if not os.path.exists(args.wandb_json_path): raise Exception(f"{args.wandb_json_path} is not found.")
     return args
 
 
