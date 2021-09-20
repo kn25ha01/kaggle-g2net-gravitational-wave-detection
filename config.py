@@ -30,8 +30,9 @@ class CFG:
     # train
     train = True
     n_fold = 4
-    trn_fold = [0] # [i for i in range(n_fold)]
-    epochs = 1
+    trn_fold = [i for i in range(n_fold)]
+#    trn_fold = [0]
+    epochs = 5
     batch_size = 128
     if model_name == "tf_efficientnet_b0_ns": batch_size = 1024
     if model_name == "tf_efficientnet_b4_ns": batch_size = 256
