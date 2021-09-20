@@ -18,17 +18,16 @@ from src.utils import seed_torch, get_device
 from src.model_factory import CustomModel
 from src.dataset_factory import TFRecordDataLoader
 
-
-SAVEDIR = Path(CFG.output_dir)
 seed_torch(seed=CFG.seed)
-device = get_device()
 
 
-def inference(model, states, test_loader, device):
+def inference(model, checkpoints, test_loader):
+    device = get_device()
     model.to(device)
+    states = [torch.load(cps) for cps in checkpoints]
     tk0 = tqdm(enumerate(test_loader), total=len(test_loader))
     probs = []
-    for i, d in tk0:
+    for i, (d) in tk0:
         images = torch.from_numpy(d[0]).to(device)
         avg_preds = []
         for state in states:
@@ -43,44 +42,45 @@ def inference(model, states, test_loader, device):
     return probs
 
 
-def main(args):
-    input_dir = args.input_dir
+def save_submission(input_dir, output_dir, predictions):
+    df = pd.read_csv(f"{input_dir}/sample_submission.csv")
+    df['target'] = predictions
+    df[['id', 'target']].to_csv(f"{output_dir}/submission.csv", index=False)
+
+
+def main():
+    args = parse_args()
     checkpoints = args.checkpoints
 
-    if CFG.test:
-        model = CustomModel(CFG, pretrained=False)
+    input_dir = '/content/input'
+    output_dir = './output'
 
-        states = [torch.load(cps) for cps in checkpoints]
+    model = CustomModel(CFG, pretrained=False)
 
-        test_files = glob.glob(f"{input_dir}/test/test*.tfrecords")
+    test_loader = TFRecordDataLoader(
+        files=glob.glob(f"{input_dir}/test/test*.tfrecords"),
+        batch_size=CFG.batch_size * 2,
+        cache=True,
+        train=False,
+        repeat=False,
+        shuffle=False,
+        labeled=False,
+        return_image_ids=False,
+    )
 
-        test_loader = TFRecordDataLoader(
-            test_files,
-            batch_size=CFG.batch_size * 2,
-            cache=True,
-            train=False,
-            repeat=False,
-            shuffle=False,
-            labeled=False,
-            return_image_ids=False,
-        )
+    # inference
+    predictions = inference(model, checkpoints, test_loader)
 
-        predictions = inference(model, states, test_loader, device)
-
-        # save result
-        test_df = pd.read_csv(f"{input_dir}/sample_submission.csv")
-        test_df['target'] = predictions
-        test_df[['id', 'target']].to_csv(f"{SAVEDIR}/submission.csv", index=False)
+    # save submission.csv
+    save_submission(input_dir, output_dir, predictions)
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', type=str, required=True, dest='input_dir')
     parser.add_argument('-c', '--checkpoints', type=str, required=True, dest='checkpoints')
     args = parser.parse_args()
-    if not os.path.exists(args.input_dir): raise Exception(f"{args.input_dir} is not found.")
 
-    # to list
+    # change str to list
     checkpoints = args.checkpoints.split(',')
     for cps in checkpoints:
         if not os.path.exists(cps): raise Exception(f"{cps} is not found.")
@@ -90,6 +90,5 @@ def parse_args():
 
 
 if __name__=='__main__':
-    args = parse_args()
-    main(args)
+    main()
 
