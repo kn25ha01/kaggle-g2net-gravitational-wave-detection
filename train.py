@@ -20,11 +20,11 @@ from src.dataset_factory import TFRecordDataLoader
 from src.helper import AverageMeter, timeSince, max_memory_allocated
 
 
-SAVEDIR = Path("./output")
+SAVEDIR = Path(CFG.output_dir)
 if not os.path.exists(SAVEDIR):
     os.mkdir(SAVEDIR)
-LOG_PATH = os.path.join(SAVEDIR, 'train.log')
-LOGGER = init_logger(log_file=LOG_PATH)
+
+LOGGER = init_logger(log_file=CFG.log_filename)
 
 seed_torch(seed=CFG.seed)
 device = get_device()
@@ -217,12 +217,6 @@ def train_loop(train_tfrecords: np.ndarray, val_tfrecords: np.ndarray, fold: int
 def main(args):
     # get input dir
     INPUT_DIR = args.input_dir
-
-    # list tfrecords
-    #all_files = []
-    #for path in ['train_fold01', 'train_fold23']:
-    #    all_files.extend(np.sort(np.array(tf.io.gfile.glob(INPUT_DIR + '/' + path + "/train*.tfrecords"))))
-    #all_files = np.array(all_files)
 
     fold0 = [INPUT_DIR + f"/train_fold01/train{i}.tfrecords" for i in range(0, 5)]
     fold1 = [INPUT_DIR + f"/train_fold01/train{i}.tfrecords" for i in range(5, 10)]

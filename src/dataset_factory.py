@@ -14,6 +14,14 @@ def count_data_items(fileids):
     return len(fileids) * 28000
 
 
+def count_data_items_test(fileids):
+    """
+    Count the number of samples.
+    Each of the TFRecord datasets is designed to contain 22600 samples.
+    """
+    return len(fileids) * 22600
+
+
 def prepare_wave(wave):
     wave = tf.reshape(tf.io.decode_raw(wave, tf.float32), (3, 4096))
     normalized_waves = []
@@ -43,8 +51,12 @@ def read_unlabeled_tfrecord(example, return_image_id):
     return prepare_wave(example["wave"]), example["wave_id"] if return_image_id else 0
 
 
-def get_dataset(files, batch_size=1, repeat=False, cache=False, shuffle=False, labeled=True, return_image_ids=True):
-    ds = tf.data.TFRecordDataset(files, num_parallel_reads=AUTO, compression_type="GZIP")
+def get_dataset(files, batch_size=1, cache=False, train=True, repeat=False, shuffle=False, labeled=True, return_image_ids=True):
+    if train:
+        ds = tf.data.TFRecordDataset(files, num_parallel_reads=AUTO, compression_type="GZIP")
+    else:
+        ds = tf.data.TFRecordDataset(files, compression_type="GZIP")
+
     if cache:
         # You'll need around 15GB RAM if you'd like to cache val dataset, and 50~60GB RAM for train dataset.
         ds = ds.cache()
@@ -74,6 +86,7 @@ class TFRecordDataLoader:
             files, 
             batch_size=batch_size,
             cache=cache,
+            train=train,
             repeat=repeat,
             shuffle=shuffle,
             labeled=labeled,
