@@ -6,7 +6,7 @@ class CFG:
     log_filename = f"{output_dir}/train.log"
 
     # console log
-    print_freq = 100
+    print_freq = 1000
 
     # seed
     seed = 42
@@ -15,6 +15,7 @@ class CFG:
     num_workers = 4 # not use
 
     # model
+    bandpass_params = dict(lf=20, hf=500, order=8, sr=2048)
     qtransform_params = {
         "sr": 2048,
         "fmin": 20,
@@ -22,7 +23,7 @@ class CFG:
         "hop_length": 16,
         "bins_per_octave": 8,
     }
-    model_name = "tf_efficientnet_b7_ns"
+    model_name = "tf_efficientnet_b0_ns"
     in_chans = 3
     target_size = 1
     target_col = "target"
@@ -34,8 +35,14 @@ class CFG:
     trn_fold = [0]
     epochs = 5
     batch_size = 128
-    #if model_name == "tf_efficientnet_b0_ns": batch_size = 1024
-    #if model_name == "tf_efficientnet_b4_ns": batch_size = 256
+
+    if model_name == "tf_efficientnet_b0_ns":
+        batch_size = 256
+        epochs = 10
+    
+    if model_name == "tf_efficientnet_b4_ns":
+        batch_size = 256
+
     if model_name == "tf_efficientnet_b7_ns":
         if qtransform_params["hop_length"] == 32:
             batch_size = 128

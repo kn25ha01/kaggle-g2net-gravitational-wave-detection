@@ -18,6 +18,7 @@ from config import CFG
 from src.utils import get_score, init_logger, seed_torch, get_device, get_wandb_api_key
 from src.model_factory import CustomModel
 from src.dataset_factory import TFRecordDataLoader
+from src.filters import bandpass
 from src.helper import AverageMeter, timeSince, max_memory_allocated
 
 
@@ -47,7 +48,8 @@ def train_fn(files, model, criterion, optimizer, epoch, scheduler, device):
     for step, d in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        images = torch.from_numpy(d[0]).to(device)
+        x = bandpass(d[0], **CFG.bandpass_params)
+        images = torch.from_numpy(x).to(device)
         labels = torch.from_numpy(d[1]).to(device)
 
         batch_size = labels.size(0)
@@ -77,13 +79,13 @@ def train_fn(files, model, criterion, optimizer, epoch, scheduler, device):
                    epoch+1, CFG.epochs, step, len(train_loader),
                    loss=losses,
                    grad_norm=grad_norm,
-                   lr=scheduler.get_lr()[0],
+                   lr=scheduler.get_last_lr()[0],
                    remain=timeSince(start, float(step + 1) / len(train_loader)),
                    mem=max_memory_allocated()))
         # wandb
         wandb.log({
             f"loss": losses.val,
-            f"lr": scheduler.get_lr()[0]
+            f"lr": scheduler.get_last_lr()[0]
         })
     return losses.avg
 
@@ -108,7 +110,8 @@ def valid_fn(files, model, criterion, device):
         targets.extend(d[1].reshape(-1).tolist())
         filenames.extend([f.decode("UTF-8") for f in d[2]])
         
-        images = torch.from_numpy(d[0]).to(device)
+        x = bandpass(d[0], **CFG.bandpass_params)
+        images = torch.from_numpy(x).to(device)
         labels = torch.from_numpy(d[1]).to(device)
 
         batch_size = labels.size(0)

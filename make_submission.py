@@ -17,6 +17,7 @@ from config import CFG
 from src.utils import seed_torch, get_device
 from src.model_factory import CustomModel
 from src.dataset_factory import TFRecordDataLoader
+from src.filters import bandpass
 
 seed_torch(seed=CFG.seed)
 
@@ -27,8 +28,9 @@ def inference(model, checkpoints, test_loader):
     states = [torch.load(cps) for cps in checkpoints]
     tk0 = tqdm(enumerate(test_loader), total=len(test_loader))
     probs = []
-    for i, (d) in tk0:
-        images = torch.from_numpy(d[0]).to(device)
+    for i, d in tk0:
+        x = bandpass(d[0], **CFG.bandpass_params)
+        images = torch.from_numpy(x).to(device)
         avg_preds = []
         for state in states:
             model.load_state_dict(state['model'])
