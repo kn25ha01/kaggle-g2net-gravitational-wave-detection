@@ -274,20 +274,21 @@ def main(args):
                 oof_df = pd.concat([oof_df, _oof_df])
                 LOGGER.info(f"========== fold: {fold} result ==========")
                 get_result(_oof_df)
+
+                # wandb
+                wandb.finish()
+
         # CV result
         LOGGER.info(f"========== CV ==========")
         get_result(oof_df)
         # save result
         oof_df.to_csv(SAVEDIR / 'oof_df.csv', index=False)
 
-    # wandb
-    wandb.finish()
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, required=True, dest='input_dir')
-    parser.add_argument('-e', '--exp_num', type=str, required=True, dest='exp_num')
+    parser.add_argument('--exp_num', type=str, required=True, dest='exp_num')
     parser.add_argument('--wandb', type=str, required=True, dest='wandb_json_path')
     args = parser.parse_args()
     if not os.path.exists(args.input_dir): raise Exception(f"{args.input_dir} is not found.")

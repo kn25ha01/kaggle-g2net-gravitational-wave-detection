@@ -19,7 +19,7 @@ class CFG:
         "sr": 2048,
         "fmin": 20,
         "fmax": 1024,
-        "hop_length": 32,
+        "hop_length": 16,
         "bins_per_octave": 8,
     }
     model_name = "tf_efficientnet_b7_ns"
@@ -30,13 +30,18 @@ class CFG:
     # train
     train = True
     n_fold = 4
-    trn_fold = [i for i in range(n_fold)]
-#    trn_fold = [0]
+#    trn_fold = [i for i in range(n_fold)]
+    trn_fold = [0]
     epochs = 5
     batch_size = 128
-    if model_name == "tf_efficientnet_b0_ns": batch_size = 1024
-    if model_name == "tf_efficientnet_b4_ns": batch_size = 256
-    if model_name == "tf_efficientnet_b7_ns": batch_size = 128
+    #if model_name == "tf_efficientnet_b0_ns": batch_size = 1024
+    #if model_name == "tf_efficientnet_b4_ns": batch_size = 256
+    if model_name == "tf_efficientnet_b7_ns":
+        if qtransform_params["hop_length"] == 32:
+            batch_size = 128
+        elif qtransform_params["hop_length"] == 16:
+            batch_size = 64
+        
     lr = 1e-4
     min_lr = 1e-7
     weight_decay = 1e-3
