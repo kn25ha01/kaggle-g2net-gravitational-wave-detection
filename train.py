@@ -1,4 +1,5 @@
 import os
+import glob
 import time
 import argparse
 from pathlib import Path
@@ -11,14 +12,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import KFold
 import wandb
 
 from config import CFG
 from src.utils import get_score, init_logger, seed_torch, get_device, get_wandb_api_key
 from src.model_factory import CustomModel
 from src.dataset_factory import TFRecordDataLoader
-from src.filters import bandpass
+from src.filters import apply_transforms
 from src.helper import AverageMeter, timeSince, max_memory_allocated
 
 
@@ -43,12 +44,12 @@ def train_fn(files, model, criterion, optimizer, epoch, scheduler, device):
     start = end = time.time()
     global_step = 0
 
-    train_loader = TFRecordDataLoader(
-        files, cache=True, batch_size=CFG.batch_size, shuffle=True)
+    train_loader = TFRecordDataLoader(files, cache=True, batch_size=CFG.batch_size, shuffle=True)
+
     for step, d in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        x = bandpass(d[0], **CFG.bandpass_params)
+        x = apply_transforms(d[0], CFG)
         images = torch.from_numpy(x).to(device)
         labels = torch.from_numpy(d[1]).to(device)
 
@@ -101,8 +102,8 @@ def valid_fn(files, model, criterion, device):
     targets = []
     preds = []
     start = end = time.time()
-    valid_loader = TFRecordDataLoader(
-        files, cache=True, batch_size=CFG.batch_size * 2, shuffle=False)
+    valid_loader = TFRecordDataLoader(files, cache=True, batch_size=CFG.batch_size * 2, shuffle=False)
+
     for step, d in enumerate(valid_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -110,7 +111,7 @@ def valid_fn(files, model, criterion, device):
         targets.extend(d[1].reshape(-1).tolist())
         filenames.extend([f.decode("UTF-8") for f in d[2]])
         
-        x = bandpass(d[0], **CFG.bandpass_params)
+        x = apply_transforms(d[0], CFG)
         images = torch.from_numpy(x).to(device)
         labels = torch.from_numpy(d[1]).to(device)
 
@@ -239,25 +240,23 @@ def main(args):
     INPUT_DIR = args.input_dir
     exp_num = args.exp_num
 
-    fold0 = [INPUT_DIR + f"/train_fold01/train{i}.tfrecords" for i in range(0, 5)]
-    fold1 = [INPUT_DIR + f"/train_fold01/train{i}.tfrecords" for i in range(5, 10)]
-    fold2 = [INPUT_DIR + f"/train_fold23/train{i}.tfrecords" for i in range(10, 15)]
-    fold3 = [INPUT_DIR + f"/train_fold23/train{i}.tfrecords" for i in range(15, 20)]
-    folds = [fold0, fold1, fold2, fold3]
+    all_files = np.sort(np.array(tf.io.gfile.glob(f"{INPUT_DIR}/train*/*.tfrecords")))
+    kf = KFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
+    folds = list(kf.split(all_files))
 
     def get_result(result_df):
         preds = result_df['preds'].values
         labels = result_df[CFG.target_col].values
         score = get_score(labels, preds)
         LOGGER.info(f'Score: {score:<.4f}')
-
-    # wandb
-    wandb_json_path = args.wandb_json_path
-    wandb_api_key = get_wandb_api_key(wandb_json_path)
-    wandb.login(key=wandb_api_key)
     
     if CFG.train:
         oof_df = pd.DataFrame()
+
+        # wandb
+        wandb_json_path = args.wandb_json_path
+        wandb_api_key = get_wandb_api_key(wandb_json_path)
+        wandb.login(key=wandb_api_key)
 
         for fold in range(CFG.n_fold):
             if fold in CFG.trn_fold:
@@ -270,11 +269,13 @@ def main(args):
                     job_type="train",
                 )
 
-                train_files = [f for i, f in enumerate(folds) if i != fold]
-                train_files = [i for j in train_files for i in j]
-                valid_files = folds[fold]
+                trn_idx, val_idx = folds[fold]
+                train_files = all_files[trn_idx]
+                valid_files = all_files[val_idx]
+
                 _oof_df = train_loop(train_files, valid_files, fold)
                 oof_df = pd.concat([oof_df, _oof_df])
+
                 LOGGER.info(f"========== fold: {fold} result ==========")
                 get_result(_oof_df)
 
@@ -284,6 +285,7 @@ def main(args):
         # CV result
         LOGGER.info(f"========== CV ==========")
         get_result(oof_df)
+
         # save result
         oof_df.to_csv(SAVEDIR / 'oof_df.csv', index=False)
 
